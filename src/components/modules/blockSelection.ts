@@ -303,6 +303,7 @@ export default class BlockSelection extends Module {
     const fakeClipboard = $.make('div');
 
     // Part of selection over first selected block
+    let beforeHtml: string;
     {
       const clonedRange = selectionRange.cloneRange();
       const block = BlockManager.getBlockByChildNode(clonedRange.startContainer);
@@ -319,6 +320,7 @@ export default class BlockSelection extends Module {
       const fragment = $.make('p');
 
       fragment.innerHTML = cleanHTML;
+      beforeHtml = cleanHTML;
       fakeClipboard.appendChild(fragment);
     }
 
@@ -334,11 +336,12 @@ export default class BlockSelection extends Module {
     });
 
     // Part of selection under last selected block
+    let afterHtml: string;
     {
       const clonedRange = selectionRange.cloneRange();
       const block = BlockManager.getBlockByChildNode(clonedRange.endContainer);
 
-      // Remove all range selection except over first selected block
+      // Remove all range selection except under last selected block
       clonedRange.setStartBefore(block.holder);
 
       console.log('clonedRange', clonedRange);
@@ -350,6 +353,7 @@ export default class BlockSelection extends Module {
       const fragment = $.make('p');
 
       fragment.innerHTML = cleanHTML;
+      afterHtml = cleanHTML;
       fakeClipboard.appendChild(fragment);
     }
 
@@ -360,11 +364,19 @@ export default class BlockSelection extends Module {
     e.clipboardData.setData('text/plain', textPlain);
     e.clipboardData.setData('text/html', textHTML);
 
+    const payload = {
+      before: beforeHtml,
+      blocks: [],
+      after: afterHtml,
+    };
+
     return Promise
       .all(this.selectedBlocks.map((block) => block.save()))
       .then(savedData => {
         try {
-          e.clipboardData.setData(this.Editor.Paste.MIME_TYPE, JSON.stringify(savedData));
+          payload.blocks = savedData;
+
+          e.clipboardData.setData(this.Editor.Paste.MIME_TYPE, JSON.stringify(payload));
         } catch (err) {
           // In Firefox we can't set data in async function
         }

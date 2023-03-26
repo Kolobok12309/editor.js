@@ -192,7 +192,9 @@ export default class Paste extends Module {
         this.insertEditorJSData(JSON.parse(editorJSData));
 
         return;
-      } catch (e) { } // Do nothing and continue execution as usual if error appears
+      } catch (e) {
+        console.error('paste', e);
+      } // Do nothing and continue execution as usual if error appears
     }
 
     /**
@@ -467,7 +469,13 @@ export default class Paste extends Module {
   private handlePasteEvent = async (event: ClipboardEvent): Promise<void> => {
     const { BlockManager, Toolbar } = this.Editor;
 
+    const types = event.clipboardData.types;
+    types.forEach((type) => {
+      console.log(`handlePasteEvent: "${type}"`, event.clipboardData.getData(type));
+    });
+
     /** If target is native input or is not Block, use browser behaviour */
+    console.log('first cond', !BlockManager.currentBlock, (this.isNativeBehaviour(event.target) && !event.clipboardData.types.includes('Files')));
     if (
       !BlockManager.currentBlock || (this.isNativeBehaviour(event.target) && !event.clipboardData.types.includes('Files'))
     ) {
@@ -477,9 +485,12 @@ export default class Paste extends Module {
     /**
      * If Tools is in list of errors, skip processing of paste event
      */
+    console.log('second cond', BlockManager.currentBlock, this.exceptionList.includes(BlockManager.currentBlock.name));
     if (BlockManager.currentBlock && this.exceptionList.includes(BlockManager.currentBlock.name)) {
       return;
     }
+
+    console.log('start processing')
 
     event.preventDefault();
     this.processDataTransfer(event.clipboardData);
@@ -848,11 +859,28 @@ export default class Paste extends Module {
    * @param {Array} blocks — Blocks' data to insert
    * @returns {void}
    */
-  private insertEditorJSData(blocks: Pick<SavedData, 'id' | 'data' | 'tool'>[]): void {
+  private async insertEditorJSData({
+    before,
+    blocks,
+    after,
+  }: {
+    before: string;
+    blocks: Pick<SavedData, 'id'| 'data' | 'tool'>[];
+    after: string;
+  }): Promise<void> {
+    console.log('insertEditorJSData', before, after);
+
     const { BlockManager, Caret, Tools } = this.Editor;
     const sanitizedBlocks = sanitizeBlocks(blocks, (name) =>
       Tools.blockTools.get(name).sanitizeConfig
     );
+
+    const beforePasteData = await this.processHTML(before);
+    const afterPasteData = await this.processHTML(after);
+
+    await Promise.all(beforePasteData.map(async (content, i) => {
+      return this.insertBlock(content, false);
+    }));
 
     sanitizedBlocks.forEach(({ tool, data }, i) => {
       let needToReplaceCurrentBlock = false;
@@ -871,6 +899,10 @@ export default class Paste extends Module {
 
       Caret.setToBlock(block, Caret.positions.END);
     });
+
+    await Promise.all(afterPasteData.map(async (content, i) => {
+      return this.insertBlock(content, false);
+    }));
   }
 
   /**

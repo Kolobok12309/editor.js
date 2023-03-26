@@ -22,10 +22,10 @@
     /**
      * Workaround Safari case when user can select inline-fragment with cross-block-selection
      */
-    /*& [contenteditable] {*/
-    /*  -webkit-user-select: none;*/
-    /*  user-select: none;*/
-    /*}*/
+    & [contenteditable] {
+      -webkit-user-select: none;
+      user-select: none;
+    }
 
     img,
     .ce-stub {
