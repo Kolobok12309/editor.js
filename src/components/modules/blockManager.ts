@@ -369,13 +369,17 @@ export default class BlockManager extends Module {
       replace,
     });
 
+    this.callPasteHandler(toolName, pasteEvent, block);
+
+    return block;
+  }
+
+  public callPasteHandler(toolName: string, pasteEvent: PasteEvent, block: Block): void {
     try {
       block.call(BlockToolAPI.ON_PASTE, pasteEvent);
     } catch (e) {
       _.log(`${toolName}: onPaste callback call is failed`, 'error', e);
     }
-
-    return block;
   }
 
   /**

@@ -5,7 +5,7 @@
  * @version 1.0.0
  */
 import Module from '../__module';
-import Block from '../block';
+import Block, { BlockToolAPI } from '../block';
 import * as _ from '../utils';
 import $ from '../dom';
 import Shortcuts from '../utils/shortcuts';
@@ -13,6 +13,8 @@ import Shortcuts from '../utils/shortcuts';
 import SelectionUtils from '../selection';
 import { SanitizerConfig } from '../../../types/configs';
 import { clean } from '../utils/sanitizer';
+import { EditorJsClipboardData, EditorJsClipboardDataFragment } from './paste';
+import { SavedData } from '../../../types/data-formats';
 
 /**
  *
@@ -284,8 +286,8 @@ export default class BlockSelection extends Module {
    * @param {ClipboardEvent} e - copy/cut event
    * @returns {Promise<void>}
    */
-  public copySelectedBlocks(e: ClipboardEvent): Promise<void> {
-    const { BlockManager } = this.Editor;
+  public async copySelectedBlocks(e: ClipboardEvent): Promise<void> {
+    const { BlockManager, Paste } = this.Editor;
 
     console.log('BlockSelection copySelectedBlocks', e, e.clipboardData.types);
     const selectionRange = SelectionUtils.range;
@@ -303,25 +305,34 @@ export default class BlockSelection extends Module {
     const fakeClipboard = $.make('div');
 
     // Part of selection over first selected block
-    let beforeHtml: string;
+    let beforeData: SavedData;
+    let beforeFragment: EditorJsClipboardDataFragment;
     {
       const clonedRange = selectionRange.cloneRange();
       const block = BlockManager.getBlockByChildNode(clonedRange.startContainer);
+      const toolName = block.tool.name;
 
       // Remove all range selection except over first selected block
       clonedRange.setEndAfter(block.holder);
+
+      beforeData = await Paste.prepareCopyFragment(clonedRange);
 
       console.log('clonedRange', clonedRange);
 
       const rangeFragment = clonedRange.cloneContents();
       const innerHTML = $.htmlFromFragment(rangeFragment);
 
+
       const cleanHTML = clean(innerHTML, this.sanitizerConfig);
       const fragment = $.make('p');
 
       fragment.innerHTML = cleanHTML;
-      beforeHtml = cleanHTML;
       fakeClipboard.appendChild(fragment);
+
+      beforeFragment = {
+        tool: block.tool.name,
+        content: cleanHTML,
+      };
     }
 
     this.selectedBlocks.forEach((block) => {
@@ -336,13 +347,16 @@ export default class BlockSelection extends Module {
     });
 
     // Part of selection under last selected block
-    let afterHtml: string;
+    let afterData: SavedData;
+    let afterFragment: EditorJsClipboardDataFragment;
     {
       const clonedRange = selectionRange.cloneRange();
       const block = BlockManager.getBlockByChildNode(clonedRange.endContainer);
 
       // Remove all range selection except under last selected block
       clonedRange.setStartBefore(block.holder);
+
+      afterData = await Paste.prepareCopyFragment(clonedRange, true);
 
       console.log('clonedRange', clonedRange);
 
@@ -353,8 +367,12 @@ export default class BlockSelection extends Module {
       const fragment = $.make('p');
 
       fragment.innerHTML = cleanHTML;
-      afterHtml = cleanHTML;
       fakeClipboard.appendChild(fragment);
+
+      afterFragment = {
+        tool: block.tool.name,
+        content: cleanHTML,
+      };
     }
 
     const textPlain = Array.from(fakeClipboard.childNodes).map((node) => node.textContent)
@@ -364,17 +382,30 @@ export default class BlockSelection extends Module {
     e.clipboardData.setData('text/plain', textPlain);
     e.clipboardData.setData('text/html', textHTML);
 
-    const payload = {
-      before: beforeHtml,
+    const payload: EditorJsClipboardData = {
       blocks: [],
-      after: afterHtml,
     };
+
+    // if (beforeFragment) {
+    //   payload.before = beforeFragment;
+    // }
+    // if (afterFragment) {
+    //   payload.after = afterFragment;
+    // }
+
+    console.log('preparedData', beforeData, afterData);
 
     return Promise
       .all(this.selectedBlocks.map((block) => block.save()))
       .then(savedData => {
         try {
-          payload.blocks = savedData;
+          // @ts-ignore
+          const filtered: SavedData[] = savedData.filter(Boolean);
+
+          if (beforeData) filtered.unshift(beforeData);
+          if (afterData) filtered.push(afterData);
+
+          payload.blocks = filtered;
 
           e.clipboardData.setData(this.Editor.Paste.MIME_TYPE, JSON.stringify(payload));
         } catch (err) {

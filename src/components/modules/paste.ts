@@ -8,7 +8,7 @@ import {
   SanitizerConfig,
   SanitizerRule
 } from '../../../types';
-import Block from '../block';
+import Block, { BlockToolAPI } from '../block';
 import { SavedData } from '../../../types/data-formats';
 import { clean, sanitizeBlocks } from '../utils/sanitizer';
 import BlockTool from '../tools/block';
@@ -67,6 +67,19 @@ interface FilesSubstitution {
    * @type {string[]}
    */
   mimeTypes: string[];
+}
+
+export interface EditorJsClipboardDataFragment {
+  tool: string;
+  /**
+   * HTML content of fragment
+   */
+  content: string;
+}
+export interface EditorJsClipboardData {
+  before?: EditorJsClipboardDataFragment;
+  after?: EditorJsClipboardDataFragment;
+  blocks: Pick<SavedData, 'id' | 'data' | 'tool'>[];
 }
 
 /**
@@ -143,6 +156,8 @@ export default class Paste extends Module {
    */
   public async prepare(): Promise<void> {
     this.processTools();
+    console.log('toolsTags', this.toolsTags);
+    console.log('tagsByTool', this.tagsByTool);
   }
 
   /**
@@ -215,6 +230,8 @@ export default class Paste extends Module {
       return result;
     }, {});
 
+    console.log('pasteToolsTags', toolsTags);
+
     const customConfig = Object.assign({}, toolsTags, Tools.getAllInlineToolsSanitizeConfig(), { br: {} });
     const cleanData = clean(htmlData, customConfig);
 
@@ -281,6 +298,8 @@ export default class Paste extends Module {
    */
   private processTools(): void {
     const tools = this.Editor.Tools.blockTools;
+
+    console.log('tools', tools);
 
     Array
       .from(tools.values())
@@ -571,7 +590,7 @@ export default class Paste extends Module {
    * @param {string} innerHTML - html string to process
    * @returns {PasteData[]}
    */
-  private processHTML(innerHTML: string): PasteData[] {
+  private processHTML(innerHTML: string, defaultToolName?: string): PasteData[] {
     const { Tools } = this.Editor;
 
     /**
@@ -593,7 +612,11 @@ export default class Paste extends Module {
 
     return nodes
       .map((node) => {
-        let content, tool = Tools.defaultTool, isBlock = false;
+        let content,
+            tool = (defaultToolName && Tools.blockTools.get(defaultToolName)) || Tools.defaultTool,
+            isBlock = false;
+
+        console.log('defaultToolName', defaultToolName, tool);
 
         switch (node.nodeType) {
           /** If node is a document fragment, use temp wrapper to get innerHTML */
@@ -656,7 +679,9 @@ export default class Paste extends Module {
           return result;
         }, {});
 
-        const customConfig = Object.assign({}, toolTags, tool.baseSanitizeConfig);
+        const customConfig = Object.assign({}, toolTags, Tools.getAllInlineToolsSanitizeConfig(), tool.baseSanitizeConfig);
+
+        console.log(`processHtml customConfig: "${tool.name}"`, customConfig);
 
         /**
          * A workaround for the HTMLJanitor bug with Tables (incorrect sanitizing of table.innerHTML)
@@ -830,6 +855,62 @@ export default class Paste extends Module {
   }
 
   /**
+   * Get SavedData from partially selected blocks
+   * Get HTML from selection range and pass it to processHTML for small sanitize and parse
+   * After this create empty block(copy to them id, tunes, toolName) and call pasteHandler
+   * After all of this actions, block contain data and we use block.save()
+   * 
+   * @param range
+   * @param isLast
+   */
+  public async prepareCopyFragment(range: Range, isLast = false): Promise<null | SavedData> {
+    const { BlockManager, Tools } = this.Editor;
+
+    console.log('prepareCopyFragment', range);
+
+    const block = BlockManager.getBlockByChildNode(isLast ? range.endContainer : range.startContainer);
+    const tool = block.tool;
+    const toolName = tool.name;
+
+    const rangeFragment = range.cloneContents();
+    const rawHtml = $.htmlFromFragment(rangeFragment);
+
+    // const toolsTags = Object.keys(this.toolsTags).reduce((result, tag) => {
+    //   /**
+    //    * If Tool explicitly specifies sanitizer configuration for the tag, use it.
+    //    * Otherwise, remove all attributes
+    //    */
+    //   result[tag.toLowerCase()] = this.toolsTags[tag].sanitizationConfig ?? {};
+    //
+    //   return result;
+    // }, {});
+    // const customConfig = Object.assign({}, toolsTags, Tools.getAllInlineToolsSanitizeConfig(), { br: {} });
+    // const cleanHtml = clean(rawHtml, customConfig);
+
+    const pasteData = this.processHTML(rawHtml, toolName);
+
+    if (!pasteData.length) return null;
+
+    const {
+      event: pasteEvent,
+    } = pasteData[0];
+
+    console.log('pasteData', pasteData);
+
+    const fragmentBlock = BlockManager.composeBlock({
+      tool: toolName,
+      id: block.id,
+      tunes: block.tunes,
+    });
+
+    BlockManager.callPasteHandler(toolName, pasteEvent, fragmentBlock);
+
+    const data = await fragmentBlock.save();
+
+    return data || null;
+  }
+
+  /**
    * Insert pasted Block content to Editor
    *
    * @param {PasteData} data - data to insert
@@ -863,11 +944,7 @@ export default class Paste extends Module {
     before,
     blocks,
     after,
-  }: {
-    before: string;
-    blocks: Pick<SavedData, 'id'| 'data' | 'tool'>[];
-    after: string;
-  }): Promise<void> {
+  }: EditorJsClipboardData): Promise<void> {
     console.log('insertEditorJSData', before, after);
 
     const { BlockManager, Caret, Tools } = this.Editor;
@@ -875,12 +952,13 @@ export default class Paste extends Module {
       Tools.blockTools.get(name).sanitizeConfig
     );
 
-    const beforePasteData = await this.processHTML(before);
-    const afterPasteData = await this.processHTML(after);
+    if (before) {
+      const beforePasteData = this.processHTML(before.content, before.tool);
 
-    await Promise.all(beforePasteData.map(async (content, i) => {
-      return this.insertBlock(content, false);
-    }));
+      await Promise.all(beforePasteData.map(async (content, i) => {
+        return this.insertBlock(content, false);
+      }));
+    }
 
     sanitizedBlocks.forEach(({ tool, data }, i) => {
       let needToReplaceCurrentBlock = false;
@@ -900,9 +978,13 @@ export default class Paste extends Module {
       Caret.setToBlock(block, Caret.positions.END);
     });
 
-    await Promise.all(afterPasteData.map(async (content, i) => {
-      return this.insertBlock(content, false);
-    }));
+    if (after) {
+      const afterPasteData = this.processHTML(after.content, after.tool);
+
+      await Promise.all(afterPasteData.map(async (content, i) => {
+        return this.insertBlock(content, false);
+      }));
+    }
   }
 
   /**
