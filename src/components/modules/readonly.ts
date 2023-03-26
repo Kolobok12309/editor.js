@@ -1,4 +1,5 @@
 import Module from '../__module';
+import Block from '../block';
 import { CriticalError } from '../errors/critical';
 
 /**
@@ -100,6 +101,25 @@ export default class ReadOnly extends Module {
     await this.Editor.Renderer.render(savedBlocks.blocks);
 
     return this.readOnlyEnabled;
+  }
+
+  public async toggleForBlock(block: Block, state: boolean): Promise<boolean> {
+    if (state && this.toolsDontSupportReadOnly.includes(block.tool.name)) {
+      this.throwCriticalError();
+    }
+
+    const oldState = block.readOnly;
+
+    /**
+     * If new state equals old one, do not re-render blocks
+     */
+    if (oldState === state) {
+      return oldState;
+    }
+
+    block.readOnly = state;
+
+    return state;
   }
 
   /**

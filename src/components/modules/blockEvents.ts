@@ -172,6 +172,8 @@ export default class BlockEvents extends Module {
   public handleCommandC(event: ClipboardEvent): void {
     const { BlockSelection } = this.Editor;
 
+    console.log('CommandC', BlockSelection.anyBlockSelected);
+
     if (!BlockSelection.anyBlockSelected) {
       return;
     }

@@ -281,6 +281,11 @@ export default class Block extends EventsDispatcher<BlockEvents> {
    */
   private readonly blockAPI: BlockAPIInterface;
 
+  // /**
+  //  * readOnly state for this block (by default equal with ReadOnly.isEnabled)
+  //  */
+  // public readonly readOnly: boolean;
+
   /**
    * @param {object} options - block constructor options
    * @param {string} [options.id] - block's id. Will be generated if omitted.
@@ -310,6 +315,8 @@ export default class Block extends EventsDispatcher<BlockEvents> {
 
     this.tool = tool;
     this.toolInstance = tool.create(data, this.blockAPI, readOnly);
+
+    this._readOnly = readOnly;
 
     /**
      * @type {BlockTune[]}
@@ -498,6 +505,7 @@ export default class Block extends EventsDispatcher<BlockEvents> {
     return this.holder.classList.contains(Block.CSS.focused);
   }
 
+  private _selected: boolean = false;
   /**
    * Set selected state
    * We don't need to mark Block as Selected when it is empty
@@ -505,14 +513,19 @@ export default class Block extends EventsDispatcher<BlockEvents> {
    * @param {boolean} state - 'true' to select, 'false' to remove selection
    */
   public set selected(state: boolean) {
+    console.log('selected setter', state, 'readOnly' in this.toolInstance);
+    this._selected = state;
+    // return;
+    if ('readOnly' in this.toolInstance) return;
+
     if (state) {
       this.holder.classList.add(Block.CSS.selected);
 
-      SelectionUtils.addFakeCursor(this.holder);
+      // SelectionUtils.addFakeCursor(this.holder);
     } else {
       this.holder.classList.remove(Block.CSS.selected);
 
-      SelectionUtils.removeFakeCursor(this.holder);
+      // SelectionUtils.removeFakeCursor(this.holder);
     }
   }
 
@@ -522,7 +535,28 @@ export default class Block extends EventsDispatcher<BlockEvents> {
    * @returns {boolean}
    */
   public get selected(): boolean {
-    return this.holder.classList.contains(Block.CSS.selected);
+    return this._selected;
+    // return this.holder.classList.contains(Block.CSS.selected);
+  }
+
+  private _readOnly: boolean;
+  private setToolReadOnly(state: boolean, forceSet = false) {
+    if (this.tool.isReadOnlySupported && 'readOnly' in this.toolInstance) {
+      if (!forceSet && this.toolInstance.readOnly === state) return;
+
+      console.log('set readOnly', state);
+      // Disable observer
+      this.mutationObserver.disconnect();
+      this.toolInstance.readOnly = state;
+    }
+  }
+  public set readOnly(state: boolean) {
+    this._readOnly = state;
+
+    this.setToolReadOnly(state);
+  }
+  public get readOnly(): boolean {
+    return this._readOnly;
   }
 
   /**
@@ -818,6 +852,8 @@ export default class Block extends EventsDispatcher<BlockEvents> {
      * Saving a reference to plugin's content element for guaranteed accessing it later
      */
     this.toolRenderedElement = pluginsContent;
+
+    this.setToolReadOnly(this.readOnly, true);
 
     contentNode.appendChild(this.toolRenderedElement);
 

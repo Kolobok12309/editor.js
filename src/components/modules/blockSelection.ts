@@ -225,6 +225,7 @@ export default class BlockSelection extends Module {
    * @param {boolean} restoreSelection - if true, restore saved selection
    */
   public clearSelection(reason?: Event, restoreSelection = false): void {
+    console.log('BlockSelection clearSelection');
     const { BlockManager, Caret, RectangleSelection } = this.Editor;
 
     this.needToSelectAll = false;
@@ -284,12 +285,42 @@ export default class BlockSelection extends Module {
    * @returns {Promise<void>}
    */
   public copySelectedBlocks(e: ClipboardEvent): Promise<void> {
+    const { BlockManager } = this.Editor;
+
+    console.log('BlockSelection copySelectedBlocks', e, e.clipboardData.types);
+    const selectionRange = SelectionUtils.range;
+
+    console.log('BlockSelection selectionRange', selectionRange);
+
+    e.clipboardData.types.forEach((type) => {
+      console.log(`type: "${type}"`, e.clipboardData.getData(type));
+    });
     /**
      * Prevent default copy
      */
     e.preventDefault();
 
     const fakeClipboard = $.make('div');
+
+    // Part of selection over first selected block
+    {
+      const clonedRange = selectionRange.cloneRange();
+      const block = BlockManager.getBlockByChildNode(clonedRange.startContainer);
+
+      // Remove all range selection except over first selected block
+      clonedRange.setEndAfter(block.holder);
+
+      console.log('clonedRange', clonedRange);
+
+      const rangeFragment = clonedRange.cloneContents();
+      const innerHTML = $.htmlFromFragment(rangeFragment);
+
+      const cleanHTML = clean(innerHTML, this.sanitizerConfig);
+      const fragment = $.make('p');
+
+      fragment.innerHTML = cleanHTML;
+      fakeClipboard.appendChild(fragment);
+    }
 
     this.selectedBlocks.forEach((block) => {
       /**
@@ -301,6 +332,26 @@ export default class BlockSelection extends Module {
       fragment.innerHTML = cleanHTML;
       fakeClipboard.appendChild(fragment);
     });
+
+    // Part of selection under last selected block
+    {
+      const clonedRange = selectionRange.cloneRange();
+      const block = BlockManager.getBlockByChildNode(clonedRange.endContainer);
+
+      // Remove all range selection except over first selected block
+      clonedRange.setStartBefore(block.holder);
+
+      console.log('clonedRange', clonedRange);
+
+      const rangeFragment = clonedRange.cloneContents();
+      const innerHTML = $.htmlFromFragment(rangeFragment);
+
+      const cleanHTML = clean(innerHTML, this.sanitizerConfig);
+      const fragment = $.make('p');
+
+      fragment.innerHTML = cleanHTML;
+      fakeClipboard.appendChild(fragment);
+    }
 
     const textPlain = Array.from(fakeClipboard.childNodes).map((node) => node.textContent)
       .join('\n\n');
@@ -358,6 +409,7 @@ export default class BlockSelection extends Module {
    * Clear anyBlockSelected cache
    */
   public clearCache(): void {
+    console.log('BlockSelection clearCache');
     this.anyBlockSelectedCache = null;
   }
 

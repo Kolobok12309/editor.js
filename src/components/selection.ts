@@ -363,9 +363,12 @@ export default class SelectionUtils {
 
     fakeCursor.dataset.mutationFree = 'true';
 
+    console.log('addFakeCursor', !!range, !(container && !container.contains(range.startContainer)))
     if (!range || (container && !container.contains(range.startContainer))) {
       return;
     }
+
+    console.log('range collapse')
 
     range.collapse();
     range.insertNode(fakeCursor);
@@ -408,12 +411,14 @@ export default class SelectionUtils {
    */
   public save(): void {
     this.savedSelectionRange = SelectionUtils.range;
+    console.log('save', this.savedSelectionRange);
   }
 
   /**
    * Restore saved SelectionUtils's range
    */
   public restore(): void {
+    console.log('restore', this.savedSelectionRange);
     if (!this.savedSelectionRange) {
       return;
     }

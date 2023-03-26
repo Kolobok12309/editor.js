@@ -106,6 +106,7 @@ export default class RectangleSelection extends Module {
    * Creating rect and hang handlers
    */
   public prepare(): void {
+    return;
     this.enableModuleBindings();
   }
 

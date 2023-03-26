@@ -805,7 +805,7 @@ export default class UI extends Module<UINodes> {
     if (CrossBlockSelection.isCrossBlockSelectionStarted) {
       // Removes all ranges when any Block is selected
       if (BlockSelection.anyBlockSelected) {
-        Selection.get().removeAllRanges();
+        // Selection.get().removeAllRanges();
       }
     }
 

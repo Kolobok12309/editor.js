@@ -581,4 +581,14 @@ export default class Dom {
       right: left + rect.width,
     };
   }
+
+  public static htmlFromFragment(fragment: DocumentFragment): string {
+    if (!this.isFragment(fragment)) return '';
+
+    const wrapper = this.make('div');
+
+    wrapper.appendChild(fragment);
+
+    return wrapper.innerHTML;
+  }
 }

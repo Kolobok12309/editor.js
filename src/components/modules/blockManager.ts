@@ -225,6 +225,7 @@ export default class BlockManager extends Module {
    * @param {string} options.tool - tools passed in editor config {@link EditorConfig#tools}
    * @param {string} [options.id] - unique id for this block
    * @param {BlockToolData} [options.data] - constructor params
+   * @param {boolean} [options.readOnly] - overwrite readOnly from Editor.ReadOnly.isEnabled
    * @returns {Block}
    */
   public composeBlock({
@@ -232,8 +233,14 @@ export default class BlockManager extends Module {
     data = {},
     id = undefined,
     tunes: tunesData = {},
-  }: {tool: string; id?: string; data?: BlockToolData; tunes?: {[name: string]: BlockTuneData}}): Block {
-    const readOnly = this.Editor.ReadOnly.isEnabled;
+    readOnly = this.Editor.ReadOnly.isEnabled,
+  }: {
+    tool: string;
+    id?: string;
+    data?: BlockToolData;
+    tunes?: {[name: string]: BlockTuneData};
+    readOnly?: boolean;
+  }): Block {
     const tool = this.Editor.Tools.blockTools.get(name);
     const block = new Block({
       id,
@@ -261,6 +268,7 @@ export default class BlockManager extends Module {
    * @param {number} [options.index] - index where to insert new Block
    * @param {boolean} [options.needToFocus] - flag shows if needed to update current Block index
    * @param {boolean} [options.replace] - flag shows if block by passed index should be replaced with inserted one
+   * @param {boolean} [options.readonly] - overwrite readOnly from Editor.ReadOnly.isEnabled
    * @returns {Block}
    */
   public insert({
@@ -271,6 +279,7 @@ export default class BlockManager extends Module {
     needToFocus = true,
     replace = false,
     tunes = {},
+    readOnly,
   }: {
     id?: string;
     tool?: string;
@@ -279,6 +288,7 @@ export default class BlockManager extends Module {
     needToFocus?: boolean;
     replace?: boolean;
     tunes?: {[name: string]: BlockTuneData};
+    readOnly?: boolean;
   } = {}): Block {
     let newIndex = index;
 
@@ -291,6 +301,7 @@ export default class BlockManager extends Module {
       tool,
       data,
       tunes,
+      readOnly,
     });
 
     /**
